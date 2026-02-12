@@ -35,6 +35,9 @@ const matchButtonImages = [
   'images/demo4.webp',
 ];
 
+// Preloaded demo videos (indexed 0-3 for demo1-demo4)
+let demoVideos = [];
+
 // Dimensions
 let appWidth = 1200;
 let appHeight = 800;
@@ -291,7 +294,7 @@ class PlaybackMenuTennis extends Page {
   onMatchClick(matchNum) {
     playbackMatchPageTennis.loadJSONFile(`data/demo${matchNum}.json`);
     playbackMatchPageTennis.loadAudio(`data/demo${matchNum}.mp3`);
-    playbackMatchPageTennis.loadVideo(`data/demo${matchNum}.mp4`);
+    playbackMatchPageTennis.loadVideo(matchNum);
     playbackMatchPageTennis.startInPause();
     this.hideGrid();
     currentPage = playbackMatchPageTennis;
@@ -355,10 +358,9 @@ class PlaybackMatchPageTennis extends Page {
 
     this.audio = null;
 
-    // Video
+    // Video (references preloaded demoVideos)
     this.video = null;
     this.hasVideo = false;
-    this.videoReady = false;
     this.lastVideoFrame = -1;
     this.videoDimensions = { drawWidth: 0, drawHeight: 0, offsetX: 0, offsetY: 0 };
     this.dimensionsCalculated = false;
@@ -412,46 +414,24 @@ class PlaybackMatchPageTennis extends Page {
     this.audio = loadSound(audioPath, () => this.audio.stop());
   }
 
-  loadVideo(videoPath) {
-    // Clean up previous video
+  loadVideo(matchNum) {
+    // Stop previous video if any
     if (this.video) {
-      this.video.stop();
-      this.video.remove();
-      this.video = null;
+      this.video.pause();
+      this.video.elt.currentTime = 0;
     }
-    this.hasVideo = false;
-    this.videoReady = false;
     this.dimensionsCalculated = false;
     this.lastVideoFrame = -1;
 
-    this.video = createVideo(videoPath, () => {
+    const idx = matchNum - 1;
+    if (idx >= 0 && idx < demoVideos.length && demoVideos[idx]) {
+      this.video = demoVideos[idx];
       this.hasVideo = true;
-      this.video.volume(0);
-      this.video.hide();
-
-      // Preload: seek to start and pause so first frame is decoded
-      this.video.elt.preload = 'auto';
-      this.video.elt.playsinline = true;
-      this.video.elt.muted = true;
-
-      // Wait for enough data to be buffered before marking ready
-      const checkReady = () => {
-        if (this.video && this.video.elt.readyState >= 3) {
-          this.videoReady = true;
-        } else if (this.video) {
-          this.video.elt.addEventListener('canplaythrough', () => {
-            this.videoReady = true;
-          }, { once: true });
-        }
-      };
-      checkReady();
-    });
-
-    this.video.elt.onerror = () => {
-      this.hasVideo = false;
-      this.videoReady = false;
+      this.video.elt.currentTime = 0;
+    } else {
       this.video = null;
-    };
+      this.hasVideo = false;
+    }
   }
 
   startInPause() {
@@ -472,7 +452,7 @@ class PlaybackMatchPageTennis extends Page {
     super.show();
 
     // If video is playing, draw it; otherwise show court + ball
-    if (this.hasVideo && this.videoReady && !this.isPaused && this.hasStarted) {
+    if (this.hasVideo && !this.isPaused && this.hasStarted) {
       this.drawCroppedVideo();
     } else {
       image(images[this.selectedImageIndex], 0, 0, 1200, 800);
@@ -574,7 +554,10 @@ class PlaybackMatchPageTennis extends Page {
 
   stopAll() {
     if (this.audio) this.audio.stop();
-    if (this.video && this.hasVideo) this.video.stop();
+    if (this.video && this.hasVideo) {
+      this.video.pause();
+      this.video.elt.currentTime = 0;
+    }
   }
 
   onKeyPressed() {
@@ -605,7 +588,7 @@ class PlaybackMatchPageTennis extends Page {
           this.startPlaybackTime = millis();
           this.lastVideoFrame = -1;
           if (this.audio) { this.audio.stop(); this.audio.play(0); }
-          if (this.video && this.hasVideo && this.videoReady) {
+          if (this.video && this.hasVideo) {
             this.video.elt.currentTime = 0;
             this.video.play();
           }
@@ -696,6 +679,19 @@ function setup() {
     desynchronized: true,
     powerPreference: "high-performance"
   });
+
+  // Preload all demo videos so they're instantly ready
+  for (let i = 1; i <= 4; i++) {
+    const vid = createVideo(`data/demo${i}.mp4`, () => {
+      vid.volume(0);
+      vid.hide();
+      vid.elt.preload = 'auto';
+      vid.elt.playsinline = true;
+      vid.elt.muted = true;
+    });
+    vid.elt.onerror = () => { demoVideos[i - 1] = null; };
+    demoVideos.push(vid);
+  }
 
   mainMenu               = new MainPage();
   vibrationGuidePage     = new VibrationGuidePage();
