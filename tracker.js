@@ -291,6 +291,7 @@ class PlaybackMenuTennis extends Page {
   onMatchClick(matchNum) {
     playbackMatchPageTennis.loadJSONFile(`data/demo${matchNum}.json`);
     playbackMatchPageTennis.loadAudio(`data/demo${matchNum}.mp3`);
+    playbackMatchPageTennis.loadVideo(`data/demo${matchNum}.mp4`);
     playbackMatchPageTennis.startInPause();
     this.hideGrid();
     currentPage = playbackMatchPageTennis;
@@ -331,7 +332,7 @@ class PlaybackMenuTennis extends Page {
 class PlaybackMatchPageTennis extends Page {
   constructor() {
     super();
-    this.selectedImageIndex = 0; // tennis court (using football pitch as stand-in)
+    this.selectedImageIndex = 0;
     this.sport = 'tennis';
     this.playbackPauseImg = playbackPauseImg;
 
@@ -353,6 +354,14 @@ class PlaybackMatchPageTennis extends Page {
     this.possession = POSSESSION_NEUTRAL;
 
     this.audio = null;
+
+    // Video
+    this.video = null;
+    this.hasVideo = false;
+    this.videoReady = false;
+    this.lastVideoFrame = -1;
+    this.videoDimensions = { drawWidth: 0, drawHeight: 0, offsetX: 0, offsetY: 0 };
+    this.dimensionsCalculated = false;
   }
 
   setBallTo(msg) {
@@ -403,12 +412,55 @@ class PlaybackMatchPageTennis extends Page {
     this.audio = loadSound(audioPath, () => this.audio.stop());
   }
 
+  loadVideo(videoPath) {
+    // Clean up previous video
+    if (this.video) {
+      this.video.stop();
+      this.video.remove();
+      this.video = null;
+    }
+    this.hasVideo = false;
+    this.videoReady = false;
+    this.dimensionsCalculated = false;
+    this.lastVideoFrame = -1;
+
+    this.video = createVideo(videoPath, () => {
+      this.hasVideo = true;
+      this.video.volume(0);
+      this.video.hide();
+
+      // Preload: seek to start and pause so first frame is decoded
+      this.video.elt.preload = 'auto';
+      this.video.elt.playsinline = true;
+      this.video.elt.muted = true;
+
+      // Wait for enough data to be buffered before marking ready
+      const checkReady = () => {
+        if (this.video && this.video.elt.readyState >= 3) {
+          this.videoReady = true;
+        } else if (this.video) {
+          this.video.elt.addEventListener('canplaythrough', () => {
+            this.videoReady = true;
+          }, { once: true });
+        }
+      };
+      checkReady();
+    });
+
+    this.video.elt.onerror = () => {
+      this.hasVideo = false;
+      this.videoReady = false;
+      this.video = null;
+    };
+  }
+
   startInPause() {
     this.isPaused = true;
     this.hasStarted = false;
     this.counter = 0;
     this.totalPausedDuration = 0;
     this.startPlaybackTime = millis();
+    this.lastVideoFrame = -1;
     webConnect(PLAYBACK_WS);
   }
 
@@ -418,13 +470,19 @@ class PlaybackMatchPageTennis extends Page {
 
   show() {
     super.show();
-    image(images[this.selectedImageIndex], 0, 0, 1200, 800);
 
-    const imgSize = 65;
-    if (this.possession === POSSESSION_HOME) {
-      image(ballTennisHome, this.ballX - imgSize / 2, this.ballY - imgSize / 2, imgSize, imgSize);
+    // If video is playing, draw it; otherwise show court + ball
+    if (this.hasVideo && this.videoReady && !this.isPaused && this.hasStarted) {
+      this.drawCroppedVideo();
     } else {
-      image(ballTennisAway, this.ballX - imgSize / 2, this.ballY - imgSize / 2, imgSize, imgSize);
+      image(images[this.selectedImageIndex], 0, 0, 1200, 800);
+
+      const imgSize = 65;
+      if (this.possession === POSSESSION_HOME) {
+        image(ballTennisHome, this.ballX - imgSize / 2, this.ballY - imgSize / 2, imgSize, imgSize);
+      } else {
+        image(ballTennisAway, this.ballX - imgSize / 2, this.ballY - imgSize / 2, imgSize, imgSize);
+      }
     }
 
     if (this.isPaused) {
@@ -456,6 +514,49 @@ class PlaybackMatchPageTennis extends Page {
     }
   }
 
+  calculateVideoDimensions() {
+    if (!this.video || this.dimensionsCalculated) return;
+    let videoAspect = this.video.width / this.video.height;
+    let appAspect = appWidth / appHeight;
+    if (videoAspect > appAspect) {
+      this.videoDimensions.drawHeight = appHeight;
+      this.videoDimensions.drawWidth = appHeight * videoAspect;
+      this.videoDimensions.offsetX = (appWidth - this.videoDimensions.drawWidth) / 2;
+      this.videoDimensions.offsetY = 0;
+    } else {
+      this.videoDimensions.drawWidth = appWidth;
+      this.videoDimensions.drawHeight = appWidth / videoAspect;
+      this.videoDimensions.offsetX = 0;
+      this.videoDimensions.offsetY = (appHeight - this.videoDimensions.drawHeight) / 2;
+    }
+    this.dimensionsCalculated = true;
+  }
+
+  drawCroppedVideo() {
+    if (!this.video) return;
+    this.calculateVideoDimensions();
+
+    let currentFrame = this.video.time();
+    if (currentFrame === this.lastVideoFrame) return;
+    this.lastVideoFrame = currentFrame;
+
+    push();
+    imageMode(CORNER);
+    let { drawWidth, drawHeight, offsetX, offsetY } = this.videoDimensions;
+    if (offsetX < 0) {
+      let sourceX = Math.abs(offsetX) * (this.video.width / drawWidth);
+      let sourceW = appWidth * (this.video.width / drawWidth);
+      copy(this.video, sourceX, 0, sourceW, this.video.height, 0, 0, appWidth, appHeight);
+    } else if (offsetY < 0) {
+      let sourceY = Math.abs(offsetY) * (this.video.height / drawHeight);
+      let sourceH = appHeight * (this.video.height / drawHeight);
+      copy(this.video, 0, sourceY, this.video.width, sourceH, 0, 0, appWidth, appHeight);
+    } else {
+      image(this.video, offsetX, offsetY, drawWidth, drawHeight);
+    }
+    pop();
+  }
+
   processEntry(msg) {
     this.setBallTo(msg);
     if (msg.Pa === 1) this.addActionMessage("Shot", 500);
@@ -471,39 +572,55 @@ class PlaybackMatchPageTennis extends Page {
     webSendJson(JSON.stringify(playbackMsg));
   }
 
+  stopAll() {
+    if (this.audio) this.audio.stop();
+    if (this.video && this.hasVideo) this.video.stop();
+  }
+
   onKeyPressed() {
     if (keyCode === ESCAPE) {
-      if (this.audio) this.audio.stop();
+      this.stopAll();
       this.isPaused = true;
       this.hasStarted = false;
       currentPage = playbackMenuTennis;
       return;
     }
     if (key === 'r' || key === 'R') {
+      this.stopAll();
       this.counter = 0;
       this.totalPausedDuration = 0;
       this.startPlaybackTime = millis();
       this.isPaused = true;
       this.hasStarted = false;
-      if (this.audio) this.audio.stop();
+      this.lastVideoFrame = -1;
       return;
     }
     if (key === ' ') {
       if (this.isPaused) {
         if (!this.hasStarted) {
+          // First play
           this.hasStarted = true;
           this.counter = 0;
           this.totalPausedDuration = 0;
           this.startPlaybackTime = millis();
+          this.lastVideoFrame = -1;
           if (this.audio) { this.audio.stop(); this.audio.play(0); }
+          if (this.video && this.hasVideo && this.videoReady) {
+            this.video.elt.currentTime = 0;
+            this.video.play();
+          }
         } else {
+          // Resume from pause
           this.totalPausedDuration += millis() - this.pauseStartTime;
           if (this.audio) this.audio.play();
+          if (this.video && this.hasVideo) this.video.play();
         }
         this.isPaused = false;
       } else {
+        // Pause
         this.pauseStartTime = millis();
         if (this.audio) this.audio.pause();
+        if (this.video && this.hasVideo) this.video.pause();
         this.isPaused = true;
       }
     }
