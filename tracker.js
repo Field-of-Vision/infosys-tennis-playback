@@ -6,6 +6,7 @@ let pages = [];
 let currentPage;
 
 let mainMenu;
+let setupPage;
 let vibrationGuidePage;
 let playbackMenuTennis;
 let playbackMatchPageTennis;
@@ -21,8 +22,14 @@ let tennisPaused;
 // Overlay for playback pause
 let playbackPauseImg;
 
+// Overlay for video playback
+let overlayImg;
+
 // Vibration guide background
 let vibrationsBgImg;
+
+// Setup guide background
+let setupBgImg;
 
 // Playback background for tennis (using soccer asset as temporary stand-in)
 let playbackBgTennis;
@@ -38,9 +45,9 @@ const matchButtonImages = [
 // Preloaded demo videos (indexed 0-3 for demo1-demo4)
 let demoVideos = [];
 
-// Dimensions
-let appWidth = 1200;
-let appHeight = 800;
+// Dimensions (1080p)
+let appWidth = 1920;
+let appHeight = 1080;
 
 let connectionLost = false;
 
@@ -53,7 +60,9 @@ let myFont;
 let backgroundImg;
 
 // WebSocket URL for playback
-const PLAYBACK_WS = "wss://cxgmjito89.execute-api.eu-west-1.amazonaws.com/production";
+//Websocket for tennis commented out for now
+const PLAYBACK_WS = "wss://jd2iqh9o32.execute-api.ap-southeast-2.amazonaws.com/production";
+//const PLAYBACK_WS = "wss://tgh899snfl.execute-api.ap-southeast-2.amazonaws.com/production";
 
 //////////////////////////////
 // Base Page Class
@@ -101,26 +110,37 @@ class MainPage extends Page {
     super();
     this.font = myFont;
     this.background = backgroundImg;
+    this.setupButton = null;
     this.beginButton = null;
     this.vibrationButton = null;
     this.initGUI();
   }
 
   initGUI() {
-    // BEGIN button
-    this.beginButton = createButton('BEGIN');
+    // Setup Guide button (left)
+    this.setupButton = createButton('Setup<br>Guide');
+    this.setupButton.parent('ui-container');
+    this.setupButton.class('side-button');
+    this.setupButton.mousePressed(() => {
+      currentPage = setupPage;
+      currentPage.show();
+    });
+    this.controllers.push(this.setupButton);
+
+    // BEGIN button (center)
+    this.beginButton = createButton('Begin');
     this.beginButton.parent('ui-container');
-    this.beginButton.class('start-button');
+    this.beginButton.class('center-button');
     this.beginButton.mousePressed(() => {
       currentPage = playbackMenuTennis;
       currentPage.show();
     });
     this.controllers.push(this.beginButton);
 
-    // Vibration Guide button
-    this.vibrationButton = createButton('Vibration Guide');
+    // Vibration Guide button (right)
+    this.vibrationButton = createButton('Vibration<br>Guide');
     this.vibrationButton.parent('ui-container');
-    this.vibrationButton.class('start-button vibration-button');
+    this.vibrationButton.class('side-button');
     this.vibrationButton.mousePressed(() => {
       currentPage = vibrationGuidePage;
       currentPage.show();
@@ -131,6 +151,48 @@ class MainPage extends Page {
   show() {
     super.show();
     if (this.background) background(this.background);
+  }
+}
+
+//////////////////////////////
+// Setup Guide
+//////////////////////////////
+
+class SetupPage extends Page {
+  constructor() {
+    super();
+    this.background = setupBgImg;
+
+    // Back button
+    this.backButton = createButton('← Back');
+    this.backButton.class('back-button');
+    this.backButton.mousePressed(() => this.goBack());
+    this.backButton.hide();
+  }
+
+  show() {
+    super.show();
+    if (this.background) {
+      imageMode(CORNER);
+      image(this.background, 0, 0, appWidth, appHeight);
+    }
+    this.backButton.show();
+  }
+
+  hide() {
+    super.hide();
+    this.backButton.hide();
+  }
+
+  goBack() {
+    currentPage = mainMenu;
+    currentPage.show();
+  }
+
+  onKeyPressed() {
+    if (keyCode === ESCAPE) {
+      this.goBack();
+    }
   }
 }
 
@@ -147,6 +209,12 @@ class VibrationGuidePage extends Page {
     this.player1Btn = null;
     this.player2Btn = null;
     this.initUI();
+
+    // Back button
+    this.backButton = createButton('← Back');
+    this.backButton.class('back-button');
+    this.backButton.mousePressed(() => this.goBack());
+    this.backButton.hide();
   }
 
   initUI() {
@@ -209,9 +277,9 @@ class VibrationGuidePage extends Page {
 
   sendVibration(field) {
     const msg = {
-      action: 'dalymount_IRL_sendMessage',
+      action: 'kia_AUS_sendMessage',
       message: {
-        x: 48,
+        x: 51,
         y: 32,
         serve: 0,
         ace: 0,
@@ -246,12 +314,13 @@ class VibrationGuidePage extends Page {
       image(this.background, 0, 0, appWidth, appHeight);
     }
     this.showPanel();
-    webConnect(PLAYBACK_WS);
+    this.backButton.show();
   }
 
   hide() {
     super.hide();
     this.hidePanel();
+    this.backButton.hide();
   }
 
   onKeyPressed() {
@@ -272,10 +341,18 @@ class PlaybackMenuTennis extends Page {
     this.matchGrid = select('#match-grid');
     this.buttons = [];
     this.initButtons();
+
+    // Back button
+    this.backButton = createButton('← Back');
+    this.backButton.class('back-button');
+    this.backButton.mousePressed(() => this.goBack());
+    this.backButton.hide();
   }
 
   initButtons() {
-    for (let i = 0; i < 4; i++) {
+    // Only show demo1 and demo2 (comment out demo3 and demo4)
+    const activeMatches = [0, 1]; // indices for demo1 and demo2
+    for (let i of activeMatches) {
       const matchNum = i + 1;
       const btn = createElement('button');
       btn.class('match-button');
@@ -310,20 +387,26 @@ class PlaybackMenuTennis extends Page {
 
   show() {
     super.show();
-    image(this.background, 0, 0, width, height);
+    image(this.background, 0, 0, appWidth, appHeight);
     this.showGrid();
+    this.backButton.show();
   }
 
   hide() {
     super.hide();
     this.hideGrid();
+    this.backButton.hide();
+  }
+
+  goBack() {
+    this.hideGrid();
+    currentPage = mainMenu;
+    currentPage.show();
   }
 
   onKeyPressed() {
     if (keyCode === ESCAPE) {
-      this.hideGrid();
-      currentPage = mainMenu;
-      currentPage.show();
+      this.goBack();
     }
   }
 }
@@ -348,7 +431,6 @@ class PlaybackMatchPageTennis extends Page {
     this.pauseStartTime = 0;
     this.totalPausedDuration = 0;
     this.counter = 0;
-    this.baseT = 0;
     this.hasStarted = false;
 
     this.actionMessages = [];
@@ -360,6 +442,12 @@ class PlaybackMatchPageTennis extends Page {
 
     // Video (references preloaded demoVideos)
     this.video = null;
+
+    // Back button
+    this.backButton = createButton('← Back');
+    this.backButton.class('back-button');
+    this.backButton.mousePressed(() => this.goBack());
+    this.backButton.hide();
     this.hasVideo = false;
     this.lastVideoFrame = -1;
     this.videoDimensions = { drawWidth: 0, drawHeight: 0, offsetX: 0, offsetY: 0 };
@@ -369,17 +457,17 @@ class PlaybackMatchPageTennis extends Page {
   setBallTo(msg) {
     let scaleX = appWidth / 102;
     let scaleY = appHeight / 64;
-    this.ballX = msg.X * scaleX;
-    this.ballY = msg.Y * scaleY;
-    this.possession = msg.P;
+    this.ballX = msg.x * scaleX;
+    this.ballY = msg.y * scaleY;
+    this.possession = msg.possession;
   }
 
   homeBall() {
-    if (this.jsonSize > 0 && this.jsonArray[0].message) {
-      let firstMsg = this.jsonArray[0].message;
+    if (this.jsonSize > 0) {
+      let firstMsg = this.jsonArray[0];
       this.setBallTo(firstMsg);
       let homeMsg = {
-        action: 'dalymount_IRL_sendMessage',
+        action: 'kia_AUS_sendMessage',
         message: { ...firstMsg }
       };
       webSendJson(JSON.stringify(homeMsg));
@@ -387,23 +475,19 @@ class PlaybackMatchPageTennis extends Page {
   }
 
   loadJSONFile(filepath) {
-    loadJSON(filepath, (data) => {
-      this.jsonData = data;
-      if (!data || !data.data) {
-        this.jsonArray = [];
-        this.jsonSize = 0;
-        this.baseT = 0;
-      } else {
-        this.jsonArray = data.data;
+    // Load as raw text since the file is newline-delimited JSON objects
+    fetch(filepath)
+      .then(r => r.text())
+      .then(text => {
+        // Split on }{ boundaries to get individual JSON objects
+        const objects = text.trim().replace(/\}\s*\{/g, '}|||{').split('|||');
+        this.jsonArray = objects.map(s => {
+          try { return JSON.parse(s); } catch(e) { return null; }
+        }).filter(Boolean);
         this.jsonSize = this.jsonArray.length;
-        if (this.jsonSize > 0 && this.jsonArray[0].message) {
-          this.baseT = this.jsonArray[0].message.T;
-          if (this.isPaused) this.homeBall();
-        } else {
-          this.baseT = 0;
-        }
-      }
-    });
+        console.log(`Loaded ${this.jsonSize} entries from ${filepath}`);
+        if (this.jsonSize > 0 && this.isPaused) this.homeBall();
+      });
   }
 
   loadAudio(audioPath) {
@@ -441,7 +525,6 @@ class PlaybackMatchPageTennis extends Page {
     this.totalPausedDuration = 0;
     this.startPlaybackTime = millis();
     this.lastVideoFrame = -1;
-    webConnect(PLAYBACK_WS);
   }
 
   addActionMessage(msg, duration) {
@@ -450,12 +533,18 @@ class PlaybackMatchPageTennis extends Page {
 
   show() {
     super.show();
+    this.backButton.show();
 
     // If video is playing, draw it; otherwise show court + ball
     if (this.hasVideo && !this.isPaused && this.hasStarted) {
       this.drawCroppedVideo();
+      // Draw overlay on top of video during playback
+      if (overlayImg) {
+        imageMode(CORNER);
+        image(overlayImg, 0, 0, appWidth, appHeight);
+      }
     } else {
-      image(images[this.selectedImageIndex], 0, 0, 1200, 800);
+      image(images[this.selectedImageIndex], 0, 0, appWidth, appHeight);
 
       const imgSize = 65;
       if (this.possession === POSSESSION_HOME) {
@@ -467,7 +556,7 @@ class PlaybackMatchPageTennis extends Page {
 
     if (this.isPaused) {
       imageMode(CORNER);
-      image(this.playbackPauseImg, 0, 0, 1200, 800);
+      image(this.playbackPauseImg, 0, 0, appWidth, appHeight);
     }
 
     push();
@@ -484,10 +573,11 @@ class PlaybackMatchPageTennis extends Page {
 
     if (!this.isPaused && this.counter < this.jsonSize) {
       let entry = this.jsonArray[this.counter];
-      if (entry && entry.message) {
-        let scheduled = this.startPlaybackTime + (entry.message.T - this.baseT) * 1000 + this.totalPausedDuration;
+      if (entry) {
+        // Send entry when its timestamp (t in seconds) is reached
+        let scheduled = this.startPlaybackTime + (entry.t || 0) * 1000 + this.totalPausedDuration;
         if (millis() >= scheduled) {
-          this.processEntry(entry.message);
+          this.processEntry(entry);
           this.counter++;
         }
       }
@@ -539,16 +629,17 @@ class PlaybackMatchPageTennis extends Page {
 
   processEntry(msg) {
     this.setBallTo(msg);
-    if (msg.Pa === 1) this.addActionMessage("Shot", 500);
-    if (msg.G === 1) this.addActionMessage("Point!", 4000);
-    if (msg.C === 1) this.addActionMessage("Ace!", 2000);
-    if (msg.R === 1) this.addActionMessage("Rally", 500);
-    if (msg.S === 1) this.addActionMessage("Serve", 1000);
+    if (msg.serve === 1) this.addActionMessage("Serve", 1000);
+    if (msg.ace === 1) this.addActionMessage("Ace!", 2000);
+    if (msg.point_net === 1) this.addActionMessage("Net!", 1500);
+    if (msg.point_other === 1) this.addActionMessage("Point!", 4000);
+    if (msg.point_out_or_serve_fault === 1) this.addActionMessage("Fault!", 1500);
 
     let playbackMsg = {
-      action: 'dalymount_IRL_sendMessage',
+      action: 'kia_AUS_sendMessage',
       message: { ...msg }
     };
+    console.log(`T:${msg.t} X:${msg.x} Y:${msg.y} P:${msg.possession}`, msg);
     webSendJson(JSON.stringify(playbackMsg));
   }
 
@@ -576,6 +667,7 @@ class PlaybackMatchPageTennis extends Page {
       this.isPaused = true;
       this.hasStarted = false;
       this.lastVideoFrame = -1;
+      if (this.jsonSize > 0) this.homeBall();
       return;
     }
     if (key === ' ') {
@@ -608,6 +700,18 @@ class PlaybackMatchPageTennis extends Page {
       }
     }
   }
+
+  hide() {
+    super.hide();
+    this.backButton.hide();
+  }
+
+  goBack() {
+    this.stopAll();
+    this.isPaused = true;
+    this.hasStarted = false;
+    currentPage = playbackMenuTennis;
+  }
 }
 
 //////////////////////////////
@@ -618,10 +722,11 @@ let requests = [];
 let socket = null;
 
 function webConnect(uri) {
-  if (socket && socket.readyState === WebSocket.OPEN) return;
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+  console.log(`WebSocket connecting to: ${uri}`);
   socket = new WebSocket(uri);
-  socket.onopen = () => connectionLost = false;
-  socket.onclose = () => connectionLost = true;
+  socket.onopen = () => { connectionLost = false; console.log(`WebSocket connected: ${uri}`); };
+  socket.onclose = () => { connectionLost = true; console.log(`WebSocket disconnected: ${uri}`); };
   socket.onerror = (error) => console.error('WebSocket error:', error);
 }
 
@@ -635,8 +740,11 @@ function webDisconnect() {
 
 function webSendJson(json) {
   if (socket && socket.readyState === WebSocket.OPEN) {
+    console.log(`WS SEND (open): ${json.substring(0, 120)}...`);
     socket.send(json);
   } else {
+    const state = socket ? socket.readyState : 'no socket';
+    console.warn(`WS QUEUED (state: ${state}): ${json.substring(0, 120)}...`);
     requests.push(json);
   }
 }
@@ -644,7 +752,9 @@ function webSendJson(json) {
 function webThread() {
   setInterval(() => {
     while (requests.length > 0 && socket?.readyState === WebSocket.OPEN) {
-      socket.send(requests.shift());
+      const msg = requests.shift();
+      console.log(`WS FLUSH queued: ${msg.substring(0, 120)}...`);
+      socket.send(msg);
     }
   }, 5);
 }
@@ -661,6 +771,7 @@ function checkInternetConnectionThread() {
 }
 
 function webSetup() {
+  webConnect(PLAYBACK_WS);
   webThread();
   checkInternetConnectionThread();
   window.addEventListener('online',  () => connectionLost = false);
@@ -694,12 +805,14 @@ function setup() {
   }
 
   mainMenu               = new MainPage();
+  setupPage              = new SetupPage();
   vibrationGuidePage     = new VibrationGuidePage();
   playbackMenuTennis     = new PlaybackMenuTennis();
   playbackMatchPageTennis = new PlaybackMatchPageTennis();
 
   addPages(
     mainMenu,
+    setupPage,
     vibrationGuidePage,
     playbackMenuTennis,
     playbackMatchPageTennis
@@ -742,6 +855,9 @@ function preload() {
   // Playback pause overlay
   playbackPauseImg = loadImage('images/pause.webp');
 
+  // Video overlay (shown during video playback)
+  overlayImg = loadImage('images/overlay.webp');
+
   // Tennis court background (shown during playback)
   images[0] = loadImage('images/court.webp');
 
@@ -754,6 +870,9 @@ function preload() {
 
   // Tennis playback menu background
   playbackBgTennis = loadImage('images/playback background.webp');
+
+  // Setup guide background
+  setupBgImg = loadImage('images/setup.webp');
 
   // Vibration guide background
   vibrationsBgImg = loadImage('images/vibrations.webp');
