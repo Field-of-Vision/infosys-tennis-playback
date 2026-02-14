@@ -253,7 +253,11 @@ class VibrationGuidePage extends Page {
     const gameWonBtn = createElement('button', 'Game Won');
     gameWonBtn.class('vib-button game-won');
     gameWonBtn.parent(grid);
-    gameWonBtn.mousePressed(() => this.sendVibration('point_other'));
+    gameWonBtn.mousePressed(() => {
+      this.sendVibration('point_other');
+      this.sendVibration('point_other');
+      this.sendVibration('point_other');
+    });
 
     // Back hint
     const backBtn = createElement('button', 'Press ESC to return');
@@ -526,6 +530,10 @@ class PlaybackMatchPageTennis extends Page {
       this.video = demoVideos[idx];
       this.hasVideo = true;
       this.video.elt.currentTime = 0;
+      // Add event listener for when video ends
+      this.video.elt.onended = () => {
+        this.resetPlayback();
+      };
     } else {
       this.video = null;
       this.hasVideo = false;
@@ -670,6 +678,17 @@ class PlaybackMatchPageTennis extends Page {
     }
   }
 
+  resetPlayback() {
+    this.stopAll();
+    this.counter = 0;
+    this.totalPausedDuration = 0;
+    this.startPlaybackTime = millis();
+    this.isPaused = true;
+    this.hasStarted = false;
+    this.lastVideoFrame = -1;
+    if (this.jsonSize > 0) this.homeBall();
+  }
+
   onKeyPressed() {
     if (keyCode === ESCAPE) {
       this.stopAll();
@@ -680,14 +699,7 @@ class PlaybackMatchPageTennis extends Page {
       return;
     }
     if (key === 'r' || key === 'R') {
-      this.stopAll();
-      this.counter = 0;
-      this.totalPausedDuration = 0;
-      this.startPlaybackTime = millis();
-      this.isPaused = true;
-      this.hasStarted = false;
-      this.lastVideoFrame = -1;
-      if (this.jsonSize > 0) this.homeBall();
+      this.resetPlayback();
       return;
     }
     if (key === ' ') {
