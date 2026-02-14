@@ -148,7 +148,7 @@ class MainPage extends Page {
 
   show() {
     super.show();
-    if (this.background) background(this.background);
+    // Background already set in super.show(), no need to set again
   }
 }
 
@@ -485,6 +485,11 @@ class PlaybackMatchPageTennis extends Page {
         this.jsonSize = this.jsonArray.length;
         console.log(`Loaded ${this.jsonSize} entries from ${filepath}`);
         if (this.jsonSize > 0 && this.isPaused) this.homeBall();
+      })
+      .catch(err => {
+        console.error(`Failed to load JSON file ${filepath}:`, err);
+        this.jsonArray = [];
+        this.jsonSize = 0;
       });
   }
 
@@ -493,14 +498,25 @@ class PlaybackMatchPageTennis extends Page {
       this.audio.stop();
       this.audio = null;
     }
-    this.audio = loadSound(audioPath, () => this.audio.stop());
+    this.audio = loadSound(
+      audioPath,
+      () => this.audio.stop(),
+      (err) => {
+        console.error(`Failed to load audio file ${audioPath}:`, err);
+        this.audio = null;
+      }
+    );
   }
 
   loadVideo(matchNum) {
-    // Stop previous video if any
+    // Clean up previous video if any
     if (this.video) {
       this.video.pause();
       this.video.elt.currentTime = 0;
+      // Remove old video element from DOM to prevent memory leak
+      if (this.video.elt.parentNode) {
+        this.video.remove();
+      }
     }
     this.dimensionsCalculated = false;
     this.lastVideoFrame = -1;
@@ -584,6 +600,11 @@ class PlaybackMatchPageTennis extends Page {
 
   calculateVideoDimensions() {
     if (!this.video || this.dimensionsCalculated) return;
+    // Check if video metadata is loaded (width and height > 0)
+    if (this.video.width === 0 || this.video.height === 0) {
+      console.warn('Video dimensions not available yet');
+      return;
+    }
     let videoAspect = this.video.width / this.video.height;
     let appAspect = appWidth / appHeight;
     if (videoAspect > appAspect) {
@@ -655,6 +676,7 @@ class PlaybackMatchPageTennis extends Page {
       this.isPaused = true;
       this.hasStarted = false;
       currentPage = playbackMenuTennis;
+      currentPage.show();
       return;
     }
     if (key === 'r' || key === 'R') {
@@ -679,7 +701,7 @@ class PlaybackMatchPageTennis extends Page {
           this.lastVideoFrame = -1;
           if (this.audio) { this.audio.stop(); this.audio.play(0); }
           if (this.video && this.hasVideo) {
-            this.video.elt.currentTime = 0;
+            // Video currentTime already set to 0 in loadVideo()
             this.video.play();
           }
         } else {
@@ -709,6 +731,7 @@ class PlaybackMatchPageTennis extends Page {
     this.isPaused = true;
     this.hasStarted = false;
     currentPage = playbackMenuTennis;
+    currentPage.show();
   }
 }
 
@@ -718,13 +741,34 @@ class PlaybackMatchPageTennis extends Page {
 
 let requests = [];
 let socket = null;
+const MAX_QUEUE_SIZE = 1000; // Prevent unbounded memory growth
+let wsFlushInterval = null;
+let connectionCheckInterval = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY = 3000; // 3 seconds
 
 function webConnect(uri) {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
   console.log(`WebSocket connecting to: ${uri}`);
   socket = new WebSocket(uri);
-  socket.onopen = () => { connectionLost = false; console.log(`WebSocket connected: ${uri}`); };
-  socket.onclose = () => { connectionLost = true; console.log(`WebSocket disconnected: ${uri}`); };
+  socket.onopen = () => {
+    connectionLost = false;
+    reconnectAttempts = 0; // Reset on successful connection
+    console.log(`WebSocket connected: ${uri}`);
+  };
+  socket.onclose = () => {
+    connectionLost = true;
+    console.log(`WebSocket disconnected: ${uri}`);
+    // Attempt to reconnect
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      reconnectAttempts++;
+      console.log(`Attempting to reconnect (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+      setTimeout(() => webConnect(uri), RECONNECT_DELAY);
+    } else {
+      console.error('Max reconnection attempts reached. Please refresh the page.');
+    }
+  };
   socket.onerror = (error) => console.error('WebSocket error:', error);
 }
 
@@ -743,12 +787,19 @@ function webSendJson(json) {
   } else {
     const state = socket ? socket.readyState : 'no socket';
     console.warn(`WS QUEUED (state: ${state}): ${json.substring(0, 120)}...`);
+    // Prevent unbounded queue growth
+    if (requests.length >= MAX_QUEUE_SIZE) {
+      console.error(`WebSocket queue full (${MAX_QUEUE_SIZE}), dropping oldest message`);
+      requests.shift(); // Remove oldest message
+    }
     requests.push(json);
   }
 }
 
 function webThread() {
-  setInterval(() => {
+  // Clear any existing interval to prevent duplicates
+  if (wsFlushInterval) clearInterval(wsFlushInterval);
+  wsFlushInterval = setInterval(() => {
     while (requests.length > 0 && socket?.readyState === WebSocket.OPEN) {
       const msg = requests.shift();
       console.log(`WS FLUSH queued: ${msg.substring(0, 120)}...`);
@@ -758,8 +809,10 @@ function webThread() {
 }
 
 function checkInternetConnectionThread() {
+  // Clear any existing interval to prevent duplicates
+  if (connectionCheckInterval) clearInterval(connectionCheckInterval);
   let wasConnected = navigator.onLine;
-  setInterval(() => {
+  connectionCheckInterval = setInterval(() => {
     let isConnected = navigator.onLine;
     if (wasConnected !== isConnected) {
       connectionLost = !isConnected;
@@ -792,15 +845,17 @@ function setup() {
 
   // Preload all demo videos so they're instantly ready
   for (let i = 1; i <= 2; i++) {
+    const idx = i - 1; // Store index before async operations
     const vid = createVideo(`data/demo${i}.mp4`, () => {
-      vid.volume(0);
-      vid.hide();
       vid.elt.preload = 'auto';
       vid.elt.playsinline = true;
-      vid.elt.muted = true;
     });
-    vid.elt.onerror = () => { demoVideos[i - 1] = null; };
-    demoVideos.push(vid);
+    // Hide immediately to prevent flash on screen
+    vid.hide();
+    vid.volume(0);
+    vid.elt.muted = true;
+    vid.elt.onerror = () => { demoVideos[idx] = null; };
+    demoVideos[idx] = vid; // Use explicit indexing instead of push
   }
 
   mainMenu               = new MainPage();
@@ -825,7 +880,7 @@ function setup() {
 }
 
 function draw() {
-  if (currentPage?.show) currentPage.show();
+  if (currentPage) currentPage.show();
   if (connectionLost) displayConnectionWarning();
 }
 
