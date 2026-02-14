@@ -38,8 +38,6 @@ let playbackBgTennis;
 const matchButtonImages = [
   'images/demo1.webp',
   'images/demo2.webp',
-  'images/demo3.webp',
-  'images/demo4.webp',
 ];
 
 // Preloaded demo videos (indexed 0-3 for demo1-demo4)
@@ -783,6 +781,7 @@ function webSetup() {
 //////////////////////////////
 
 function setup() {
+  pixelDensity(1); // Force 1:1 pixel ratio regardless of display
   const cnv = createCanvas(appWidth, appHeight);
   cnv.parent('canvas-container');
   cnv.elt.getContext('2d', {
@@ -792,7 +791,7 @@ function setup() {
   });
 
   // Preload all demo videos so they're instantly ready
-  for (let i = 1; i <= 4; i++) {
+  for (let i = 1; i <= 2; i++) {
     const vid = createVideo(`data/demo${i}.mp4`, () => {
       vid.volume(0);
       vid.hide();

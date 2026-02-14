@@ -2,17 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>FOV Tennis Playback</title>
   <style>
-    body {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
       margin: 0;
       padding: 0;
       background: #fff;
       overflow: hidden;
+    }
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      min-height: 100vh;
     }
     #canvas-container {
       position: relative;
