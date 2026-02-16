@@ -117,6 +117,16 @@ function logout() {
   location.reload();
 }
 
+// Secure SHA-256 hash function
+async function hashPassword(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
+
 //////////////////////////////
 // Login Page
 //////////////////////////////
@@ -129,7 +139,8 @@ class LoginPage extends Page {
     this.submitButton = null;
     this.errorMessage = null;
     this.container = null;
-    this.passwordHash = 'MW5mb3N5c01hdGNoRmVlbA==';
+    // SHA-256 hash of (password)"
+    this.passwordHash = 'dac456a3cee47b04d67dabc835b264411b685ed2aac7b165b0aa7ae575382517';
     this.initGUI();
   }
 
@@ -194,9 +205,9 @@ class LoginPage extends Page {
     this.container.hide();
   }
 
-  attemptLogin() {
+  async attemptLogin() {
     const password = this.passwordInput.value();
-    const hash = btoa(password);
+    const hash = await hashPassword(password);
 
     if (hash === this.passwordHash) {
       // Correct password
