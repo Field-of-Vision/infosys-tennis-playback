@@ -5,6 +5,7 @@
 let pages = [];
 let currentPage;
 
+let loginPage;
 let mainMenu;
 let setupPage;
 let vibrationGuidePage;
@@ -100,6 +101,131 @@ function addPages(...pgs) {
 }
 
 //////////////////////////////
+// Authentication Helper
+//////////////////////////////
+
+function isAuthenticated() {
+  return localStorage.getItem('authenticated') === 'true';
+}
+
+function setAuthenticated(value) {
+  localStorage.setItem('authenticated', value.toString());
+}
+
+function logout() {
+  setAuthenticated(false);
+  location.reload();
+}
+
+//////////////////////////////
+// Login Page
+//////////////////////////////
+
+class LoginPage extends Page {
+  constructor() {
+    super();
+    this.background = null; // No background image for login page
+    this.passwordInput = null;
+    this.submitButton = null;
+    this.errorMessage = null;
+    this.container = null;
+    this.passwordHash = 'MW5mb3N5c01hdGNoRmVlbA==';
+    this.initGUI();
+  }
+
+  initGUI() {
+    // Create login container
+    this.container = createElement('div');
+    this.container.id('login-container');
+    this.container.style('position', 'absolute');
+    this.container.style('top', '50%');
+    this.container.style('left', '50%');
+    this.container.style('transform', 'translate(-50%, -50%)');
+    this.container.style('background', 'rgba(255, 255, 255, 0.95)');
+    this.container.style('padding', '40px');
+    this.container.style('border-radius', '10px');
+    this.container.style('box-shadow', '0 4px 6px rgba(0, 0, 0, 0.1)');
+    this.container.style('text-align', 'center');
+    this.container.style('min-width', '300px');
+
+    // Title
+    const title = createElement('h2', 'Tennis Playback Portal');
+    title.parent(this.container);
+    title.style('margin-bottom', '20px');
+    title.style('color', '#007cc3');
+
+    // Password input
+    this.passwordInput = createInput('', 'password');
+    this.passwordInput.parent(this.container);
+    this.passwordInput.attribute('placeholder', 'Enter Password');
+    this.passwordInput.style('width', '100%');
+    this.passwordInput.style('padding', '10px');
+    this.passwordInput.style('margin-bottom', '15px');
+    this.passwordInput.style('border', '2px solid #007cc3');
+    this.passwordInput.style('border-radius', '5px');
+    this.passwordInput.style('font-size', '16px');
+
+    // Submit button
+    this.submitButton = createButton('Login');
+    this.submitButton.parent(this.container);
+    this.submitButton.style('width', '100%');
+    this.submitButton.style('padding', '12px');
+    this.submitButton.style('background', '#007cc3');
+    this.submitButton.style('color', 'white');
+    this.submitButton.style('border', 'none');
+    this.submitButton.style('border-radius', '5px');
+    this.submitButton.style('font-size', '16px');
+    this.submitButton.style('cursor', 'pointer');
+    this.submitButton.mousePressed(() => this.attemptLogin());
+
+    // Error message
+    this.errorMessage = createElement('p', '');
+    this.errorMessage.parent(this.container);
+    this.errorMessage.style('color', 'red');
+    this.errorMessage.style('margin-top', '10px');
+    this.errorMessage.style('min-height', '20px');
+
+    // Allow Enter key to submit
+    this.passwordInput.elt.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') this.attemptLogin();
+    });
+
+    this.controllers.push(this.container);
+    this.container.hide();
+  }
+
+  attemptLogin() {
+    const password = this.passwordInput.value();
+    const hash = btoa(password);
+
+    if (hash === this.passwordHash) {
+      // Correct password
+      setAuthenticated(true);
+      this.errorMessage.html('');
+      this.hide();
+      currentPage = mainMenu;
+      currentPage.show();
+    } else {
+      // Wrong password
+      this.errorMessage.html('Incorrect password');
+      this.passwordInput.value('');
+    }
+  }
+
+  show() {
+    super.show();
+    background(240); // Light gray background instead of image
+    this.container.show();
+    this.passwordInput.elt.focus();
+  }
+
+  hide() {
+    super.hide();
+    this.container.hide();
+  }
+}
+
+//////////////////////////////
 // Main Menu (BEGIN + Vibration Guide)
 //////////////////////////////
 
@@ -111,6 +237,7 @@ class MainPage extends Page {
     this.setupButton = null;
     this.beginButton = null;
     this.vibrationButton = null;
+    this.logoutButton = null;
     this.initGUI();
   }
 
@@ -144,6 +271,19 @@ class MainPage extends Page {
       currentPage.show();
     });
     this.controllers.push(this.vibrationButton);
+
+    // Logout button (top-right corner)
+    this.logoutButton = createButton('Logout');
+    this.logoutButton.position(appWidth - 120, 20);
+    this.logoutButton.style('padding', '10px 20px');
+    this.logoutButton.style('background', '#d32f2f');
+    this.logoutButton.style('color', 'white');
+    this.logoutButton.style('border', 'none');
+    this.logoutButton.style('border-radius', '5px');
+    this.logoutButton.style('cursor', 'pointer');
+    this.logoutButton.style('font-size', '14px');
+    this.logoutButton.mousePressed(() => logout());
+    this.controllers.push(this.logoutButton);
   }
 
   show() {
@@ -870,6 +1010,7 @@ function setup() {
     demoVideos[idx] = vid; // Use explicit indexing instead of push
   }
 
+  loginPage              = new LoginPage();
   mainMenu               = new MainPage();
   setupPage              = new SetupPage();
   vibrationGuidePage     = new VibrationGuidePage();
@@ -877,6 +1018,7 @@ function setup() {
   playbackMatchPageTennis = new PlaybackMatchPageTennis();
 
   addPages(
+    loginPage,
     mainMenu,
     setupPage,
     vibrationGuidePage,
@@ -884,7 +1026,12 @@ function setup() {
     playbackMatchPageTennis
   );
 
-  currentPage = mainMenu;
+  // Check authentication and show appropriate page
+  if (isAuthenticated()) {
+    currentPage = mainMenu;
+  } else {
+    currentPage = loginPage;
+  }
   currentPage.show();
 
   frameRate(30);
